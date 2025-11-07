@@ -1,6 +1,3 @@
-# Workaround for first variable bug
-ให้ _init = 0;
-
 ให้ sum_array = ฟังก์ชัน(arr, len) {
     ให้ total = 0;
     ให้ i = 0;

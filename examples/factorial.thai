@@ -1,6 +1,3 @@
-# Workaround for first variable bug
-ให้ _init = 0;
-
 ให้ factorial = ฟังก์ชัน(n) {
     ถ้า (n < 2) {
         คืนค่า 1;
