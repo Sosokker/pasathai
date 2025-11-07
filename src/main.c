@@ -4,6 +4,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "evaluator.h"
+#include "gc.h"
 
 void init_evaluator();
 
@@ -105,7 +106,7 @@ static void run_repl(void)
                     }
                     else if (result->type == OBJECT_STRING)
                     {
-                        printf("%s\n", result->value.string);
+                        printf("%s\n", result->value.string.data);
                     }
                     else if (result->type == OBJECT_ERROR)
                     {
@@ -132,6 +133,7 @@ static void print_usage(const char *program_name)
 
 int main(int argc, char *argv[])
 {
+    gc_init();
     init_evaluator();
 
     /* No arguments - run REPL */

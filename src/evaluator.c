@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "evaluator.h"
+#include "gc.h"
 
 static Object *TRUE_OBJ;
 static Object *FALSE_OBJ;
@@ -26,7 +27,7 @@ static Object *builtin_print(Object **args, int arg_count)
         }
         else if (args[i]->type == OBJECT_STRING)
         {
-            printf("%s", args[i]->value.string);
+            printf("%s", args[i]->value.string.data);
         }
         else if (args[i]->type == OBJECT_NULL)
         {
@@ -43,21 +44,25 @@ static Object *builtin_print(Object **args, int arg_count)
 
 void init_evaluator()
 {
-    TRUE_OBJ = malloc(sizeof(Object));
+    TRUE_OBJ = gc_alloc_object();
     TRUE_OBJ->type = OBJECT_BOOLEAN;
     TRUE_OBJ->value.boolean = 1;
+    gc_register_singleton(TRUE_OBJ);
 
-    FALSE_OBJ = malloc(sizeof(Object));
+    FALSE_OBJ = gc_alloc_object();
     FALSE_OBJ->type = OBJECT_BOOLEAN;
     FALSE_OBJ->value.boolean = 0;
+    gc_register_singleton(FALSE_OBJ);
 
-    NULL_OBJ = malloc(sizeof(Object));
+    NULL_OBJ = gc_alloc_object();
     NULL_OBJ->type = OBJECT_NULL;
+    gc_register_singleton(NULL_OBJ);
 
     GLOBAL_ENV = new_environment();
+    gc_set_global_env(GLOBAL_ENV);
 
     /* Register built-in functions */
-    Object *print_obj = malloc(sizeof(Object));
+    Object *print_obj = gc_alloc_object();
     print_obj->type = OBJECT_BUILTIN;
     print_obj->value.builtin = builtin_print;
     environment_set(GLOBAL_ENV, "แสดง", print_obj);
@@ -85,6 +90,7 @@ static Object *apply_function(Object *fn, Expression **args, int arg_count)
 
     Environment *extended_env = new_environment();
     extended_env->outer = fn->value.function.env;
+    gc_push_env(extended_env);
 
     for (int i = 0; i < arg_count; i++)
     {
@@ -93,6 +99,8 @@ static Object *apply_function(Object *fn, Expression **args, int arg_count)
     }
 
     Object *result = eval_block_statement_with_env(fn->value.function.body, extended_env);
+
+    gc_pop_env();
 
     /* Unwrap return value */
     if (result != NULL && result->type == OBJECT_RETURN_VALUE)
@@ -109,6 +117,7 @@ static Object *eval_block_statement_with_env(BlockStatement *block, Environment 
 
     Environment *old_env = GLOBAL_ENV;
     GLOBAL_ENV = env;
+    gc_push_env(env);
 
     for (int i = 0; i < block->statement_count; i++)
     {
@@ -117,11 +126,13 @@ static Object *eval_block_statement_with_env(BlockStatement *block, Environment 
         /* If we hit a return statement, unwrap it and propagate */
         if (result != NULL && result->type == OBJECT_RETURN_VALUE)
         {
+            gc_pop_env();
             GLOBAL_ENV = old_env;
             return result;
         }
     }
 
+    gc_pop_env();
     GLOBAL_ENV = old_env;
 
     return result;
@@ -152,7 +163,7 @@ static Object *eval_minus_prefix_operator_expression(Object *right)
     }
 
     int64_t value = right->value.integer;
-    Object *obj = malloc(sizeof(Object));
+    Object *obj = gc_alloc_object();
     obj->type = OBJECT_INTEGER;
     obj->value.integer = -value;
     return obj;
@@ -194,7 +205,7 @@ static Object *eval_integer_infix_expression(const char *operator, Object *left,
         return left_val != right_val ? TRUE_OBJ : FALSE_OBJ;
     }
 
-    Object *obj = malloc(sizeof(Object));
+    Object *obj = gc_alloc_object();
     obj->type = OBJECT_INTEGER;
 
     if (strcmp(operator, "+") == 0)
@@ -241,26 +252,27 @@ static Object *eval_infix_expression(InfixExpression *exp)
         if (strcmp(exp->operator, "+") == 0)
         {
             /* String concatenation */
-            int len1 = strlen(left->value.string);
-            int len2 = strlen(right->value.string);
+            int len1 = strlen(left->value.string.data);
+            int len2 = strlen(right->value.string.data);
             char *result = malloc(len1 + len2 + 1);
-            strcpy(result, left->value.string);
-            strcat(result, right->value.string);
+            strcpy(result, left->value.string.data);
+            strcat(result, right->value.string.data);
 
-            Object *obj = malloc(sizeof(Object));
+            Object *obj = gc_alloc_object();
             obj->type = OBJECT_STRING;
-            obj->value.string = result;
+            obj->value.string.data = result;
+            obj->value.string.owned = 1;
             return obj;
         }
 
         if (strcmp(exp->operator, "==") == 0)
         {
-            return strcmp(left->value.string, right->value.string) == 0 ? TRUE_OBJ : FALSE_OBJ;
+            return strcmp(left->value.string.data, right->value.string.data) == 0 ? TRUE_OBJ : FALSE_OBJ;
         }
 
         if (strcmp(exp->operator, "!=") == 0)
         {
-            return strcmp(left->value.string, right->value.string) != 0 ? TRUE_OBJ : FALSE_OBJ;
+            return strcmp(left->value.string.data, right->value.string.data) != 0 ? TRUE_OBJ : FALSE_OBJ;
         }
     }
 
@@ -322,7 +334,7 @@ static Object *eval_boolean(Boolean *b)
 
 static Object *eval_integer_literal(IntegerLiteral *literal)
 {
-    Object *obj = malloc(sizeof(Object));
+    Object *obj = gc_alloc_object();
     obj->type = OBJECT_INTEGER;
     obj->value.integer = literal->value;
     return obj;
@@ -354,9 +366,10 @@ static Object *eval_while_statement(WhileStatement *stmt)
 
 static Object *eval_string_literal(StringLiteral *literal)
 {
-    Object *obj = malloc(sizeof(Object));
+    Object *obj = gc_alloc_object();
     obj->type = OBJECT_STRING;
-    obj->value.string = literal->value;
+    obj->value.string.data = literal->value;
+    obj->value.string.owned = 0; /* Borrowed from AST, don't free */
     return obj;
 }
 
@@ -382,7 +395,7 @@ Object *eval(Node *node)
         return eval_if_expression((IfExpression *)node);
     case NODE_FUNCTION_LITERAL:
     {
-        Object *fn = malloc(sizeof(Object));
+        Object *fn = gc_alloc_object();
         fn->type = OBJECT_FUNCTION;
         fn->value.function.parameters = ((FunctionLiteral *)node)->parameters;
         fn->value.function.parameter_count = ((FunctionLiteral *)node)->parameter_count;
@@ -404,7 +417,7 @@ Object *eval(Node *node)
     case NODE_RETURN_STATEMENT:
     {
         Object *val = eval((Node *)((ReturnStatement *)node)->return_value);
-        Object *return_obj = malloc(sizeof(Object));
+        Object *return_obj = gc_alloc_object();
         return_obj->type = OBJECT_RETURN_VALUE;
         return_obj->value.return_value = val;
         return return_obj;

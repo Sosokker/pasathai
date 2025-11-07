@@ -44,11 +44,20 @@ typedef Object *(*BuiltinFunction)(Object **args, int arg_count);
 struct Object
 {
     ObjectType type;
+
+    /* Garbage collection fields */
+    int marked;      /* Mark bit for GC mark phase */
+    Object *gc_next; /* Next object in GC linked list */
+
     union
     {
         int64_t integer;
         int boolean;
-        char *string;
+        struct
+        {
+            char *data;
+            int owned; /* 1 if string is malloc'd and should be freed, 0 if borrowed from AST */
+        } string;
         char *error;
         Object *return_value;
         struct
@@ -62,4 +71,4 @@ struct Object
     } value;
 };
 
-#endif // OBJECT_H
+#endif /* OBJECT_H */
