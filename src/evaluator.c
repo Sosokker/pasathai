@@ -1,6 +1,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include "evaluator.h"
 #include "gc.h"
 
@@ -11,6 +12,51 @@ static Object *NULL_OBJ;
 static Environment *GLOBAL_ENV;
 
 static Object *eval_block_statement_with_env(BlockStatement *block, Environment *env);
+
+/* Runtime error helper */
+static Object *runtime_error(const char *format, ...)
+{
+    Object *obj = gc_alloc_object();
+    obj->type = OBJECT_ERROR;
+
+    char buffer[512];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(buffer, sizeof(buffer), format, args);
+    va_end(args);
+
+    obj->value.error = strdup(buffer);
+
+    fprintf(stderr, "\033[1;31merror[runtime]:\033[0m \033[1m%s\033[0m\n\n", buffer);
+
+    return obj;
+}
+
+/* Get type name for error messages */
+static const char *type_name(ObjectType type)
+{
+    switch (type)
+    {
+    case OBJECT_INTEGER:
+        return "INTEGER";
+    case OBJECT_BOOLEAN:
+        return "BOOLEAN";
+    case OBJECT_STRING:
+        return "STRING";
+    case OBJECT_NULL:
+        return "NULL";
+    case OBJECT_FUNCTION:
+        return "FUNCTION";
+    case OBJECT_BUILTIN:
+        return "BUILTIN";
+    case OBJECT_ERROR:
+        return "ERROR";
+    case OBJECT_RETURN_VALUE:
+        return "RETURN_VALUE";
+    default:
+        return "UNKNOWN";
+    }
+}
 
 /* Built-in functions */
 static Object *builtin_print(Object **args, int arg_count)
@@ -70,6 +116,11 @@ void init_evaluator()
 
 static Object *apply_function(Object *fn, Expression **args, int arg_count)
 {
+    if (fn->type == OBJECT_ERROR)
+    {
+        return fn;
+    }
+
     if (fn->type == OBJECT_BUILTIN)
     {
         /* Evaluate arguments */
@@ -77,6 +128,12 @@ static Object *apply_function(Object *fn, Expression **args, int arg_count)
         for (int i = 0; i < arg_count; i++)
         {
             evaluated_args[i] = eval((Node *)args[i]);
+            if (evaluated_args[i]->type == OBJECT_ERROR)
+            {
+                Object *err = evaluated_args[i];
+                free(evaluated_args);
+                return err;
+            }
         }
         Object *result = fn->value.builtin(evaluated_args, arg_count);
         free(evaluated_args);
@@ -85,7 +142,14 @@ static Object *apply_function(Object *fn, Expression **args, int arg_count)
 
     if (fn->type != OBJECT_FUNCTION)
     {
-        return NULL; // Error
+        return runtime_error("not a function: %s", type_name(fn->type));
+    }
+
+    /* Check argument count */
+    if (arg_count != fn->value.function.parameter_count)
+    {
+        return runtime_error("wrong number of arguments: expected %d, got %d",
+                             fn->value.function.parameter_count, arg_count);
     }
 
     Environment *extended_env = new_environment();
@@ -95,6 +159,11 @@ static Object *apply_function(Object *fn, Expression **args, int arg_count)
     for (int i = 0; i < arg_count; i++)
     {
         Object *evaluated_arg = eval((Node *)args[i]);
+        if (evaluated_arg->type == OBJECT_ERROR)
+        {
+            gc_pop_env();
+            return evaluated_arg;
+        }
         environment_set(extended_env, fn->value.function.parameters[i]->value, evaluated_arg);
     }
 
@@ -159,7 +228,7 @@ static Object *eval_minus_prefix_operator_expression(Object *right)
 {
     if (right->type != OBJECT_INTEGER)
     {
-        return NULL; // Error
+        return runtime_error("type error: cannot negate %s", type_name(right->type));
     }
 
     int64_t value = right->value.integer;
@@ -172,6 +241,12 @@ static Object *eval_minus_prefix_operator_expression(Object *right)
 static Object *eval_prefix_expression(PrefixExpression *exp)
 {
     Object *right = eval((Node *)exp->right);
+
+    if (right->type == OBJECT_ERROR)
+    {
+        return right;
+    }
+
     if (strcmp(exp->operator, "!") == 0)
     {
         return eval_bang_operator_expression(right);
@@ -180,7 +255,7 @@ static Object *eval_prefix_expression(PrefixExpression *exp)
     {
         return eval_minus_prefix_operator_expression(right);
     }
-    return NULL; // Error
+    return runtime_error("unknown operator: %s%s", exp->operator, type_name(right->type));
 }
 
 static Object *eval_integer_infix_expression(const char *operator, Object *left, Object *right)
@@ -230,17 +305,31 @@ static Object *eval_integer_infix_expression(const char *operator, Object *left,
     }
     if (strcmp(operator, "%") == 0)
     {
+        if (right_val == 0)
+        {
+            return runtime_error("division by zero in modulo operation");
+        }
         obj->value.integer = left_val % right_val;
         return obj;
     }
 
-    return NULL; /* Error */
+    return runtime_error("unknown operator: %s %s %s",
+                         type_name(OBJECT_INTEGER), operator, type_name(OBJECT_INTEGER));
 }
 
 static Object *eval_infix_expression(InfixExpression *exp)
 {
     Object *left = eval((Node *)exp->left);
+    if (left->type == OBJECT_ERROR)
+    {
+        return left;
+    }
+
     Object *right = eval((Node *)exp->right);
+    if (right->type == OBJECT_ERROR)
+    {
+        return right;
+    }
 
     if (left->type == OBJECT_INTEGER && right->type == OBJECT_INTEGER)
     {
@@ -274,6 +363,9 @@ static Object *eval_infix_expression(InfixExpression *exp)
         {
             return strcmp(left->value.string.data, right->value.string.data) != 0 ? TRUE_OBJ : FALSE_OBJ;
         }
+
+        return runtime_error("unknown operator: %s %s %s",
+                             type_name(left->type), exp->operator, type_name(right->type));
     }
 
     if (left->type == OBJECT_BOOLEAN && right->type == OBJECT_BOOLEAN)
@@ -301,7 +393,15 @@ static Object *eval_infix_expression(InfixExpression *exp)
         }
     }
 
-    return NULL_OBJ; /* Error */
+    /* Type mismatch error */
+    if (left->type != right->type)
+    {
+        return runtime_error("type mismatch: %s %s %s",
+                             type_name(left->type), exp->operator, type_name(right->type));
+    }
+
+    return runtime_error("unknown operator: %s %s %s",
+                         type_name(left->type), exp->operator, type_name(right->type));
 }
 
 static Object *eval_block_statement(BlockStatement *block)
@@ -427,7 +527,14 @@ Object *eval(Node *node)
     case NODE_EXPRESSION_STATEMENT:
         return eval((Node *)((ExpressionStatement *)node)->expression);
     case NODE_IDENTIFIER:
-        return environment_get(GLOBAL_ENV, ((Identifier *)node)->value);
+    {
+        Object *val = environment_get(GLOBAL_ENV, ((Identifier *)node)->value);
+        if (val == NULL)
+        {
+            return runtime_error("undefined variable: '%s'", ((Identifier *)node)->value);
+        }
+        return val;
+    }
     default:
         return NULL;
     }

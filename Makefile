@@ -2,7 +2,7 @@ export PATH := C:\w64devkit\bin:$(PATH)
 
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99 -Isrc
-SRCS = src/lexer.c src/parser.c src/ast.c src/evaluator.c src/object.c src/gc.c src/main.c
+SRCS = src/lexer.c src/parser.c src/ast.c src/evaluator.c src/object.c src/gc.c src/error.c src/main.c
 OBJS = $(SRCS:.c=.o)
 TARGET = pasathai
 

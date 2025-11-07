@@ -3,6 +3,7 @@
 
 #include "lexer.h"
 #include "ast.h"
+#include "error.h"
 
 typedef struct Parser Parser;
 
@@ -17,10 +18,23 @@ struct Parser
 
     prefix_parse_fn prefix_parse_fns[TOKEN_NULL + 1];
     infix_parse_fn infix_parse_fns[TOKEN_NULL + 1];
+
+    /* Error reporting */
+    Error *errors;        /* Linked list of errors */
+    const char *source;   /* Source code for error context */
+    const char *filename; /* Source filename */
 };
 
 Parser *new_parser(Lexer *l);
 void parser_next_token(Parser *p);
 Program *parse_program(Parser *p);
+
+/* Set source for error reporting */
+void parser_set_source(Parser *p, const char *source, const char *filename);
+
+/* Get and print errors */
+Error *parser_get_errors(Parser *p);
+int parser_has_errors(Parser *p);
+void parser_print_errors(Parser *p);
 
 #endif // PARSER_H

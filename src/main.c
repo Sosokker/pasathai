@@ -28,7 +28,15 @@ static void run_file(const char *filename)
 
     Lexer *l = new_lexer(input);
     Parser *p = new_parser(l);
+    parser_set_source(p, input, filename);
     Program *program = parse_program(p);
+
+    if (parser_has_errors(p))
+    {
+        parser_print_errors(p);
+        free(input);
+        exit(1);
+    }
 
     if (program == NULL)
     {
@@ -79,7 +87,14 @@ static void run_repl(void)
 
         Lexer *l = new_lexer(line);
         Parser *p = new_parser(l);
+        parser_set_source(p, line, NULL);
         Program *program = parse_program(p);
+
+        if (parser_has_errors(p))
+        {
+            parser_print_errors(p);
+            continue;
+        }
 
         if (program == NULL)
         {

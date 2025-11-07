@@ -43,6 +43,9 @@ Parser *new_parser(Lexer *l)
 {
     Parser *p = malloc(sizeof(Parser));
     p->l = l;
+    p->errors = NULL;
+    p->source = NULL;
+    p->filename = NULL;
 
     memset(p->prefix_parse_fns, 0, sizeof(p->prefix_parse_fns));
     register_prefix(p, TOKEN_IDENT, parse_identifier);
@@ -71,6 +74,61 @@ Parser *new_parser(Lexer *l)
     parser_next_token(p);
     parser_next_token(p);
     return p;
+}
+
+/* Error reporting helpers */
+void parser_set_source(Parser *p, const char *source, const char *filename)
+{
+    p->source = source;
+    p->filename = filename;
+}
+
+Error *parser_get_errors(Parser *p)
+{
+    return p->errors;
+}
+
+int parser_has_errors(Parser *p)
+{
+    return p->errors != NULL;
+}
+
+void parser_print_errors(Parser *p)
+{
+    if (p->errors != NULL)
+    {
+        error_print_all(p->errors);
+    }
+}
+
+/* Helper to add parse error with context */
+static void parser_error(Parser *p, const char *message)
+{
+    char *source_line = NULL;
+    if (p->source != NULL)
+    {
+        source_line = error_get_source_line(p->source, p->cur_token.line);
+    }
+
+    Error *err = error_new(ERROR_PARSE, message, p->filename,
+                           p->cur_token.line, p->cur_token.column,
+                           source_line);
+
+    error_append(&p->errors, err);
+
+    if (source_line != NULL)
+    {
+        free(source_line);
+    }
+}
+
+/* Helper for "expected X but got Y" errors */
+static void parser_error_expected(Parser *p, const char *expected)
+{
+    char message[256];
+    snprintf(message, sizeof(message), "expected %s, got '%s' instead",
+             expected, p->cur_token.literal);
+    parser_error(p, message);
 }
 
 void parser_next_token(Parser *p)
@@ -124,7 +182,8 @@ static LetStatement *parse_let_statement(Parser *p)
 
     if (p->peek_token.type != TOKEN_IDENT)
     {
-        return NULL; // Error handling later
+        parser_error_expected(p, "identifier after 'ให้'");
+        return NULL;
     }
     parser_next_token(p);
 
@@ -136,7 +195,8 @@ static LetStatement *parse_let_statement(Parser *p)
 
     if (p->peek_token.type != TOKEN_ASSIGN)
     {
-        return NULL; // Error handling later
+        parser_error_expected(p, "'=' after identifier");
+        return NULL;
     }
     parser_next_token(p);
 
@@ -191,6 +251,10 @@ static Expression *parse_expression(Parser *p, int precedence)
     prefix_parse_fn prefix = p->prefix_parse_fns[p->cur_token.type];
     if (prefix == NULL)
     {
+        char message[256];
+        snprintf(message, sizeof(message),
+                 "no prefix parse function for '%s'", p->cur_token.literal);
+        parser_error(p, message);
         return NULL;
     }
     Expression *left_exp = prefix(p);
