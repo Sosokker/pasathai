@@ -217,6 +217,14 @@ static TokenType lookup_ident(char *ident)
         return TOKEN_WHILE;
     if (strcmp(ident, "ว่างเปล่า") == 0)
         return TOKEN_NULL;
+    if (strcmp(ident, "สำหรับ") == 0)
+        return TOKEN_FOR;
+    if (strcmp(ident, "จาก") == 0)
+        return TOKEN_FROM;
+    if (strcmp(ident, "ถึง") == 0)
+        return TOKEN_TO;
+    if (strcmp(ident, "ก่อนถึง") == 0)
+        return TOKEN_BEFORE_TO;
     return TOKEN_IDENT;
 }
 
@@ -332,6 +340,14 @@ void next_token(Lexer *l, Token *tok)
     case '}':
         tok->type = TOKEN_RBRACE;
         tok->literal = "}";
+        break;
+    case '[':
+        tok->type = TOKEN_LBRACKET;
+        tok->literal = "[";
+        break;
+    case ']':
+        tok->type = TOKEN_RBRACKET;
+        tok->literal = "]";
         break;
     case '"':
         tok->type = TOKEN_STRING;

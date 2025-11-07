@@ -8,6 +8,7 @@ static Statement *parse_statement(Parser *p);
 static LetStatement *parse_let_statement(Parser *p);
 static ReturnStatement *parse_return_statement(Parser *p);
 static WhileStatement *parse_while_statement(Parser *p);
+static ForStatement *parse_for_statement(Parser *p);
 static ExpressionStatement *parse_expression_statement(Parser *p);
 static Expression *parse_expression(Parser *p, int precedence);
 static Expression *parse_integer_literal(Parser *p);
@@ -28,6 +29,9 @@ static Expression *parse_function_literal(Parser *p);
 static Expression *parse_call_expression(Parser *p, Expression *function);
 
 static Expression *parse_identifier(Parser *p);
+
+static Expression *parse_array_literal(Parser *p);
+static Expression *parse_index_expression(Parser *p, Expression *left);
 
 static void register_prefix(Parser *p, TokenType token_type, prefix_parse_fn fn)
 {
@@ -58,6 +62,7 @@ Parser *new_parser(Lexer *l)
     register_prefix(p, TOKEN_NULL, parse_null);
     register_prefix(p, TOKEN_IF, parse_if_expression);
     register_prefix(p, TOKEN_FUNCTION, parse_function_literal);
+    register_prefix(p, TOKEN_LBRACKET, parse_array_literal);
 
     memset(p->infix_parse_fns, 0, sizeof(p->infix_parse_fns));
     register_infix(p, TOKEN_PLUS, parse_infix_expression);
@@ -70,6 +75,7 @@ Parser *new_parser(Lexer *l)
     register_infix(p, TOKEN_LT, parse_infix_expression);
     register_infix(p, TOKEN_GT, parse_infix_expression);
     register_infix(p, TOKEN_LPAREN, parse_call_expression);
+    register_infix(p, TOKEN_LBRACKET, parse_index_expression);
 
     parser_next_token(p);
     parser_next_token(p);
@@ -141,7 +147,8 @@ Program *parse_program(Parser *p)
 {
     Program *program = malloc(sizeof(Program));
     program->node.type = NODE_PROGRAM;
-    program->statements = malloc(sizeof(Statement *) * 10); // Start with capacity for 10 statements
+    int capacity = 100; /* Increased from 10 to 100 to avoid buffer overflow */
+    program->statements = malloc(sizeof(Statement *) * capacity);
     program->statement_count = 0;
 
     while (p->cur_token.type != TOKEN_EOF)
@@ -169,6 +176,8 @@ static Statement *parse_statement(Parser *p)
         return (Statement *)parse_return_statement(p);
     case TOKEN_WHILE:
         return (Statement *)parse_while_statement(p);
+    case TOKEN_FOR:
+        return (Statement *)parse_for_statement(p);
     default:
         return (Statement *)parse_expression_statement(p);
     }
@@ -234,6 +243,7 @@ static int precedences[] = {
     [TOKEN_ASTERISK] = PREC_PRODUCT,
     [TOKEN_MODULO] = PREC_PRODUCT,
     [TOKEN_LPAREN] = PREC_CALL,
+    [TOKEN_LBRACKET] = PREC_CALL,
 };
 
 static int peek_precedence(Parser *p)
@@ -406,7 +416,7 @@ static Expression *parse_if_expression(Parser *p)
     return (Expression *)exp;
 }
 
-static Identifier **parse_function_parameters(Parser *p)
+static Identifier **parse_function_parameters(Parser *p, int *count)
 {
     Identifier **params = malloc(sizeof(Identifier *) * 10);
     int i = 0;
@@ -414,6 +424,7 @@ static Identifier **parse_function_parameters(Parser *p)
     if (p->peek_token.type == TOKEN_RPAREN)
     {
         parser_next_token(p);
+        *count = 0;
         return params;
     }
 
@@ -442,6 +453,7 @@ static Identifier **parse_function_parameters(Parser *p)
     }
     parser_next_token(p);
 
+    *count = i;
     return params;
 }
 
@@ -457,7 +469,7 @@ static Expression *parse_function_literal(Parser *p)
     }
     parser_next_token(p);
 
-    lit->parameters = parse_function_parameters(p);
+    lit->parameters = parse_function_parameters(p, &lit->parameter_count);
 
     if (p->peek_token.type != TOKEN_LBRACE)
     {
@@ -568,6 +580,73 @@ static WhileStatement *parse_while_statement(Parser *p)
     return stmt;
 }
 
+static ForStatement *parse_for_statement(Parser *p)
+{
+    ForStatement *stmt = malloc(sizeof(ForStatement));
+    stmt->statement.node.type = NODE_FOR_STATEMENT;
+    stmt->token = p->cur_token; // TOKEN_FOR
+
+    // Expect identifier (loop variable)
+    if (p->peek_token.type != TOKEN_IDENT)
+    {
+        parser_error(p, "expected identifier after 'สำหรับ'");
+        return NULL;
+    }
+    parser_next_token(p);
+
+    Identifier *var = malloc(sizeof(Identifier));
+    var->expression.node.type = NODE_IDENTIFIER;
+    var->token = p->cur_token;
+    var->value = p->cur_token.literal;
+    stmt->variable = var;
+
+    // Expect จาก (from)
+    if (p->peek_token.type != TOKEN_FROM)
+    {
+        parser_next_token(p);
+        parser_error_expected(p, "'จาก'");
+        return NULL;
+    }
+    parser_next_token(p); // consume จาก
+    parser_next_token(p); // move to start expression
+
+    stmt->start = parse_expression(p, PREC_LOWEST);
+
+    // Expect ถึง or ก่อนถึง
+    if (p->peek_token.type == TOKEN_TO)
+    {
+        stmt->inclusive = 1;
+        parser_next_token(p);
+    }
+    else if (p->peek_token.type == TOKEN_BEFORE_TO)
+    {
+        stmt->inclusive = 0;
+        parser_next_token(p);
+    }
+    else
+    {
+        parser_next_token(p);
+        parser_error_expected(p, "'ถึง' or 'ก่อนถึง'");
+        return NULL;
+    }
+
+    parser_next_token(p); // move to end expression
+    stmt->end = parse_expression(p, PREC_LOWEST);
+
+    // Expect {
+    if (p->peek_token.type != TOKEN_LBRACE)
+    {
+        parser_next_token(p);
+        parser_error_expected(p, "'{'");
+        return NULL;
+    }
+    parser_next_token(p);
+
+    stmt->body = parse_block_statement(p);
+
+    return stmt;
+}
+
 static ExpressionStatement *parse_expression_statement(Parser *p)
 {
     ExpressionStatement *stmt = malloc(sizeof(ExpressionStatement));
@@ -582,4 +661,72 @@ static ExpressionStatement *parse_expression_statement(Parser *p)
     }
 
     return stmt;
+}
+
+static Expression *parse_array_literal(Parser *p)
+{
+    ArrayLiteral *arr = malloc(sizeof(ArrayLiteral));
+    arr->expression.node.type = NODE_ARRAY_LITERAL;
+    arr->token = p->cur_token; /* The '[' token */
+
+    /* Allocate initial array for elements */
+    Expression **elements = malloc(sizeof(Expression *) * 10);
+    int element_count = 0;
+
+    /* Empty array case: [] */
+    if (p->peek_token.type == TOKEN_RBRACKET)
+    {
+        parser_next_token(p);
+        arr->elements = elements;
+        arr->element_count = 0;
+        return (Expression *)arr;
+    }
+
+    /* Parse first element */
+    parser_next_token(p);
+    elements[element_count++] = parse_expression(p, PREC_LOWEST);
+
+    /* Parse remaining elements */
+    while (p->peek_token.type == TOKEN_COMMA)
+    {
+        parser_next_token(p); /* Consume comma */
+        parser_next_token(p); /* Move to next element */
+        elements[element_count++] = parse_expression(p, PREC_LOWEST);
+    }
+
+    /* Expect closing bracket */
+    if (p->peek_token.type != TOKEN_RBRACKET)
+    {
+        parser_next_token(p); /* Move to peek to set as cur_token */
+        parser_error_expected(p, "']'");
+        return NULL;
+    }
+    parser_next_token(p);
+
+    arr->elements = elements;
+    arr->element_count = element_count;
+    return (Expression *)arr;
+}
+
+static Expression *parse_index_expression(Parser *p, Expression *left)
+{
+    IndexExpression *exp = malloc(sizeof(IndexExpression));
+    exp->expression.node.type = NODE_INDEX_EXPRESSION;
+    exp->token = p->cur_token; /* The '[' token */
+    exp->left = left;
+
+    /* Parse index expression */
+    parser_next_token(p);
+    exp->index = parse_expression(p, PREC_LOWEST);
+
+    /* Expect closing bracket */
+    if (p->peek_token.type != TOKEN_RBRACKET)
+    {
+        parser_next_token(p); /* Move to peek to set as cur_token */
+        parser_error_expected(p, "']'");
+        return NULL;
+    }
+    parser_next_token(p);
+
+    return (Expression *)exp;
 }

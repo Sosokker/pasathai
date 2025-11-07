@@ -21,6 +21,9 @@ typedef enum
     NODE_RETURN_STATEMENT,
     NODE_EXPRESSION_STATEMENT,
     NODE_WHILE_STATEMENT,
+    NODE_FOR_STATEMENT,
+    NODE_ARRAY_LITERAL,
+    NODE_INDEX_EXPRESSION,
 } NodeType;
 
 // The base Node interface
@@ -168,5 +171,32 @@ typedef struct WhileStatement
     Expression *condition;
     BlockStatement *body;
 } WhileStatement;
+
+typedef struct ForStatement
+{
+    Statement statement;
+    Token token; // the 'for' token
+    Identifier *variable;
+    Expression *start;
+    Expression *end;
+    int inclusive; // 1 for ถึง (<=), 0 for ก่อนถึง (<)
+    BlockStatement *body;
+} ForStatement;
+
+typedef struct ArrayLiteral
+{
+    Expression expression;
+    Token token; // The '[' token
+    Expression **elements;
+    int element_count;
+} ArrayLiteral;
+
+typedef struct IndexExpression
+{
+    Expression expression;
+    Token token; // The '[' token
+    Expression *left;
+    Expression *index;
+} IndexExpression;
 
 #endif // AST_H

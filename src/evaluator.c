@@ -45,6 +45,8 @@ static const char *type_name(ObjectType type)
         return "STRING";
     case OBJECT_NULL:
         return "NULL";
+    case OBJECT_ARRAY:
+        return "ARRAY";
     case OBJECT_FUNCTION:
         return "FUNCTION";
     case OBJECT_BUILTIN:
@@ -79,6 +81,43 @@ static Object *builtin_print(Object **args, int arg_count)
         {
             printf("ว่างเปล่า");
         }
+        else if (args[i]->type == OBJECT_ARRAY)
+        {
+            printf("[");
+            for (int j = 0; j < args[i]->value.array.length; j++)
+            {
+                Object *elem = args[i]->value.array.elements[j];
+                if (elem->type == OBJECT_INTEGER)
+                {
+                    printf("%lld", elem->value.integer);
+                }
+                else if (elem->type == OBJECT_STRING)
+                {
+                    printf("\"%s\"", elem->value.string.data);
+                }
+                else if (elem->type == OBJECT_BOOLEAN)
+                {
+                    printf("%s", elem->value.boolean ? "จริง" : "เท็จ");
+                }
+                else if (elem->type == OBJECT_NULL)
+                {
+                    printf("ว่างเปล่า");
+                }
+                else if (elem->type == OBJECT_ARRAY)
+                {
+                    printf("[nested array]");
+                }
+                else
+                {
+                    printf("[%s]", type_name(elem->type));
+                }
+                if (j < args[i]->value.array.length - 1)
+                {
+                    printf(", ");
+                }
+            }
+            printf("]");
+        }
         if (i < arg_count - 1)
         {
             printf(" ");
@@ -86,6 +125,102 @@ static Object *builtin_print(Object **args, int arg_count)
     }
     printf("\n");
     return NULL_OBJ;
+}
+
+static Object *builtin_len(Object **args, int arg_count)
+{
+    if (arg_count != 1)
+    {
+        return runtime_error("len() takes exactly 1 argument, got %d", arg_count);
+    }
+
+    Object *obj = args[0];
+
+    if (obj->type == OBJECT_STRING)
+    {
+        Object *result = gc_alloc_object();
+        result->type = OBJECT_INTEGER;
+        result->value.integer = (int64_t)strlen(obj->value.string.data);
+        return result;
+    }
+    else if (obj->type == OBJECT_ARRAY)
+    {
+        Object *result = gc_alloc_object();
+        result->type = OBJECT_INTEGER;
+        result->value.integer = (int64_t)obj->value.array.length;
+        return result;
+    }
+    else
+    {
+        return runtime_error("len() not supported for type %s", type_name(obj->type));
+    }
+}
+
+static Object *builtin_push(Object **args, int arg_count)
+{
+    if (arg_count != 2)
+    {
+        return runtime_error("push() takes exactly 2 arguments (array, value), got %d", arg_count);
+    }
+
+    Object *arr = args[0];
+    Object *value = args[1];
+
+    if (arr->type != OBJECT_ARRAY)
+    {
+        return runtime_error("push() requires ARRAY as first argument, got %s", type_name(arr->type));
+    }
+
+    /* Check if we need to resize */
+    if (arr->value.array.length >= arr->value.array.capacity)
+    {
+        int new_capacity = arr->value.array.capacity * 2;
+        if (new_capacity < 2)
+        {
+            new_capacity = 2;
+        }
+
+        Object **new_elements = realloc(arr->value.array.elements, sizeof(Object *) * new_capacity);
+        if (new_elements == NULL)
+        {
+            return runtime_error("push() failed to allocate memory for array expansion");
+        }
+
+        arr->value.array.elements = new_elements;
+        arr->value.array.capacity = new_capacity;
+    }
+
+    /* Add the new element */
+    arr->value.array.elements[arr->value.array.length] = value;
+    arr->value.array.length++;
+
+    return arr;
+}
+
+static Object *builtin_pop(Object **args, int arg_count)
+{
+    if (arg_count != 1)
+    {
+        return runtime_error("pop() takes exactly 1 argument (array), got %d", arg_count);
+    }
+
+    Object *arr = args[0];
+
+    if (arr->type != OBJECT_ARRAY)
+    {
+        return runtime_error("pop() requires ARRAY as argument, got %s", type_name(arr->type));
+    }
+
+    if (arr->value.array.length == 0)
+    {
+        return runtime_error("pop() called on empty array");
+    }
+
+    /* Get the last element */
+    Object *popped = arr->value.array.elements[arr->value.array.length - 1];
+    arr->value.array.length--;
+
+    return popped;
 }
 
 void init_evaluator()
@@ -112,6 +247,21 @@ void init_evaluator()
     print_obj->type = OBJECT_BUILTIN;
     print_obj->value.builtin = builtin_print;
     environment_set(GLOBAL_ENV, "แสดง", print_obj);
+
+    Object *len_obj = gc_alloc_object();
+    len_obj->type = OBJECT_BUILTIN;
+    len_obj->value.builtin = builtin_len;
+    environment_set(GLOBAL_ENV, "len", len_obj);
+
+    Object *push_obj = gc_alloc_object();
+    push_obj->type = OBJECT_BUILTIN;
+    push_obj->value.builtin = builtin_push;
+    environment_set(GLOBAL_ENV, "push", push_obj);
+
+    Object *pop_obj = gc_alloc_object();
+    pop_obj->type = OBJECT_BUILTIN;
+    pop_obj->value.builtin = builtin_pop;
+    environment_set(GLOBAL_ENV, "pop", pop_obj);
 }
 
 static Object *apply_function(Object *fn, Expression **args, int arg_count)
@@ -464,6 +614,69 @@ static Object *eval_while_statement(WhileStatement *stmt)
     return result;
 }
 
+static Object *eval_for_statement(ForStatement *stmt)
+{
+    Object *result = NULL_OBJ;
+
+    // Evaluate start expression
+    Object *start_obj = eval((Node *)stmt->start);
+    if (start_obj->type == OBJECT_ERROR)
+    {
+        return start_obj;
+    }
+    if (start_obj->type != OBJECT_INTEGER)
+    {
+        return runtime_error("for loop start value must be INTEGER, got %s", type_name(start_obj->type));
+    }
+
+    // Evaluate end expression
+    Object *end_obj = eval((Node *)stmt->end);
+    if (end_obj->type == OBJECT_ERROR)
+    {
+        return end_obj;
+    }
+    if (end_obj->type != OBJECT_INTEGER)
+    {
+        return runtime_error("for loop end value must be INTEGER, got %s", type_name(end_obj->type));
+    }
+
+    int64_t start_val = start_obj->value.integer;
+    int64_t end_val = end_obj->value.integer;
+
+    // Set loop variable to start value
+    Object *loop_var = gc_alloc_object();
+    loop_var->type = OBJECT_INTEGER;
+    loop_var->value.integer = start_val;
+    environment_set(GLOBAL_ENV, stmt->variable->value, loop_var);
+
+    // Loop: i < end (exclusive) or i <= end (inclusive)
+    while (1)
+    {
+        int64_t current = loop_var->value.integer;
+
+        // Check loop condition
+        int should_continue = stmt->inclusive ? (current <= end_val) : (current < end_val);
+        if (!should_continue)
+        {
+            break;
+        }
+
+        // Execute body
+        result = eval_block_statement(stmt->body);
+
+        // Handle return statements
+        if (result != NULL && result->type == OBJECT_RETURN_VALUE)
+        {
+            break;
+        }
+
+        // Increment loop variable
+        loop_var->value.integer++;
+    }
+
+    return result;
+}
+
 static Object *eval_string_literal(StringLiteral *literal)
 {
     Object *obj = gc_alloc_object();
@@ -524,6 +737,66 @@ Object *eval(Node *node)
     }
     case NODE_WHILE_STATEMENT:
         return eval_while_statement((WhileStatement *)node);
+    case NODE_FOR_STATEMENT:
+        return eval_for_statement((ForStatement *)node);
+    case NODE_ARRAY_LITERAL:
+    {
+        ArrayLiteral *arr_lit = (ArrayLiteral *)node;
+        Object *arr = gc_alloc_object();
+        arr->type = OBJECT_ARRAY;
+        arr->value.array.length = arr_lit->element_count;
+        arr->value.array.capacity = arr_lit->element_count > 0 ? arr_lit->element_count : 1;
+        arr->value.array.elements = malloc(sizeof(Object *) * arr->value.array.capacity);
+
+        /* Evaluate each element */
+        for (int i = 0; i < arr_lit->element_count; i++)
+        {
+            Object *elem = eval((Node *)arr_lit->elements[i]);
+            if (elem != NULL && elem->type == OBJECT_ERROR)
+            {
+                return elem;
+            }
+            arr->value.array.elements[i] = elem;
+        }
+        return arr;
+    }
+    case NODE_INDEX_EXPRESSION:
+    {
+        IndexExpression *idx_exp = (IndexExpression *)node;
+        Object *left = eval((Node *)idx_exp->left);
+        if (left != NULL && left->type == OBJECT_ERROR)
+        {
+            return left;
+        }
+
+        Object *index = eval((Node *)idx_exp->index);
+        if (index != NULL && index->type == OBJECT_ERROR)
+        {
+            return index;
+        }
+
+        /* Validate left is an array */
+        if (left->type != OBJECT_ARRAY)
+        {
+            return runtime_error("index operator not supported for %s", type_name(left->type));
+        }
+
+        /* Validate index is an integer */
+        if (index->type != OBJECT_INTEGER)
+        {
+            return runtime_error("array index must be INTEGER, got %s", type_name(index->type));
+        }
+
+        int64_t idx = index->value.integer;
+
+        /* Bounds checking */
+        if (idx < 0 || idx >= left->value.array.length)
+        {
+            return runtime_error("array index out of bounds: index %lld, length %d", idx, left->value.array.length);
+        }
+
+        return left->value.array.elements[idx];
+    }
     case NODE_EXPRESSION_STATEMENT:
         return eval((Node *)((ExpressionStatement *)node)->expression);
     case NODE_IDENTIFIER:

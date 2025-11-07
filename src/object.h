@@ -19,6 +19,7 @@ typedef enum
     OBJECT_FUNCTION,
     OBJECT_BUILTIN,
     OBJECT_STRING,
+    OBJECT_ARRAY,
     OBJECT_ERROR,
 } ObjectType;
 
@@ -67,6 +68,12 @@ struct Object
             BlockStatement *body;
             Environment *env;
         } function;
+        struct
+        {
+            Object **elements;
+            int length;
+            int capacity;
+        } array;
         BuiltinFunction builtin;
     } value;
 };

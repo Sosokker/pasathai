@@ -16,8 +16,8 @@ struct Parser
     Token cur_token;
     Token peek_token;
 
-    prefix_parse_fn prefix_parse_fns[TOKEN_NULL + 1];
-    infix_parse_fn infix_parse_fns[TOKEN_NULL + 1];
+    prefix_parse_fn prefix_parse_fns[TOKEN_BEFORE_TO + 1];
+    infix_parse_fn infix_parse_fns[TOKEN_BEFORE_TO + 1];
 
     /* Error reporting */
     Error *errors;        /* Linked list of errors */

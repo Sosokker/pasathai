@@ -123,6 +123,14 @@ void gc_mark_object(Object *obj)
         }
         break;
 
+    case OBJECT_ARRAY:
+        /* Mark all elements in the array */
+        for (int i = 0; i < obj->value.array.length; i++)
+        {
+            gc_mark_object(obj->value.array.elements[i]);
+        }
+        break;
+
     case OBJECT_INTEGER:
     case OBJECT_BOOLEAN:
     case OBJECT_NULL:
@@ -204,6 +212,10 @@ static void gc_sweep(void)
             else if (obj->type == OBJECT_ERROR && obj->value.error != NULL)
             {
                 free(obj->value.error);
+            }
+            else if (obj->type == OBJECT_ARRAY && obj->value.array.elements != NULL)
+            {
+                free(obj->value.array.elements);
             }
 
             /* Free the object itself */

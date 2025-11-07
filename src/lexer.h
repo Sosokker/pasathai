@@ -36,6 +36,8 @@ typedef enum
     TOKEN_RPAREN,
     TOKEN_LBRACE,
     TOKEN_RBRACE,
+    TOKEN_LBRACKET,
+    TOKEN_RBRACKET,
 
     // Keywords
     TOKEN_FUNCTION,
@@ -47,6 +49,10 @@ typedef enum
     TOKEN_RETURN,
     TOKEN_WHILE,
     TOKEN_NULL,
+    TOKEN_FOR,
+    TOKEN_FROM,
+    TOKEN_TO,
+    TOKEN_BEFORE_TO,
 } TokenType;
 
 typedef struct
