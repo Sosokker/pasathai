@@ -1,0 +1,22 @@
+# Counted loop (inclusive end)
+สำหรับ เลข จาก 0 ถึง 9 {
+    แสดง(เลข);  # prints 0, 1, 2, ..., 9
+}
+
+# Counted loop (exclusive end)
+สำหรับ เลช จาก 0 ก่อนถึง 10 {
+    แสดง(เลข);  # prints 0, 1, 2, ..., 9
+}
+
+# Using for loops with arrays
+ให้ arr = [10, 20, 30, 40];
+สำหรับ i จาก 0 ก่อนถึง len(arr) {
+    แสดง(arr[i]);
+}
+
+# Building arrays with for loops
+ให้ squares = [];
+สำหรับ n จาก 1 ถึง 5 {
+    push(squares, n * n);
+}
+แสดง(squares);  # [1, 4, 9, 16, 25]
