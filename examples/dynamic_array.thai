@@ -1,0 +1,23 @@
+แสดง("Building a dynamic list of squares");
+
+ให้ squares = [];
+ให้ i = 1;
+
+ขณะที่ (i < 11) {
+    ให้ square = i * i;
+    push(squares, square);
+    ให้ i = i + 1;
+}
+
+แสดง("Squares from 1 to 10:");
+แสดง(squares);
+แสดง("Total count:");
+แสดง(len(squares));
+
+แสดง("Removing last 3 elements:");
+pop(squares);
+pop(squares);
+pop(squares);
+แสดง(squares);
+แสดง("Remaining count:");
+แสดง(len(squares));

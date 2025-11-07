@@ -1,0 +1,27 @@
+แสดง("Stack Implementation with Arrays");
+
+ให้ stack = [];
+
+แสดง("Pushing items onto stack:");
+push(stack, 10);
+แสดง(stack);
+push(stack, 20);
+แสดง(stack);
+push(stack, 30);
+แสดง(stack);
+push(stack, 40);
+แสดง(stack);
+
+แสดง("Stack size:");
+แสดง(len(stack));
+
+แสดง("Popping items from stack:");
+ให้ first = pop(stack);
+แสดง(first);
+ให้ second = pop(stack);
+แสดง(second);
+
+แสดง("Remaining stack:");
+แสดง(stack);
+แสดง("Stack size:");
+แสดง(len(stack));

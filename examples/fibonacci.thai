@@ -1,0 +1,14 @@
+# Fibonacci with for loop
+ให้ a = 0;
+ให้ b = 1;
+
+แสดง("Fibonacci sequence:");
+แสดง(a);
+แสดง(b);
+
+สำหรับ i จาก 2 ก่อนถึง 10 {
+    ให้ next = a + b;
+    แสดง(next);
+    ให้ a = b;
+    ให้ b = next;
+}

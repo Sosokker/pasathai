@@ -1,0 +1,19 @@
+# Workaround for first variable bug
+ให้ _init = 0;
+
+ให้ factorial = ฟังก์ชัน(n) {
+    ถ้า (n < 2) {
+        คืนค่า 1;
+    } ไม่งั้น {
+        คืนค่า n * factorial(n - 1);
+    };
+};
+
+แสดง("Factorial of 5:");
+แสดง(factorial(5));
+
+แสดง("Factorial of 7:");
+แสดง(factorial(7));
+
+แสดง("Factorial of 10:");
+แสดง(factorial(10));

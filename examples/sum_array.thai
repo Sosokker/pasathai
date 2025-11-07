@@ -1,0 +1,17 @@
+# Workaround for first variable bug
+ให้ _init = 0;
+
+ให้ sum_array = ฟังก์ชัน(arr, len) {
+    ให้ total = 0;
+    ให้ i = 0;
+    ขณะที่ (i < len) {
+        ให้ total = total + arr[i];
+        ให้ i = i + 1;
+    }
+    คืนค่า total;
+};
+
+ให้ numbers = [10, 20, 30, 40, 50];
+ให้ result = sum_array(numbers, 5);
+แสดง("Sum of array:");
+แสดง(result);

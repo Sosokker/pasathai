@@ -1,0 +1,20 @@
+แสดง("String Operations Example");
+
+ให้ first = "สวัสดี";
+ให้ second = "ครับ";
+ให้ greeting = first + " " + second;
+
+แสดง(greeting);
+
+ให้ repeat = ฟังก์ชัน(str, times) {
+    ให้ result = "";
+    ให้ i = 0;
+    ขณะที่ (i < times) {
+        ให้ result = result + str;
+        ให้ i = i + 1;
+    }
+    คืนค่า result;
+};
+
+แสดง("Repeated string:");
+แสดง(repeat("Ha", 5));

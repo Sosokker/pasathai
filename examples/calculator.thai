@@ -1,0 +1,25 @@
+ให้ add = ฟังก์ชัน(a, b) { คืนค่า a + b; };
+ให้ subtract = ฟังก์ชัน(a, b) { คืนค่า a - b; };
+ให้ multiply = ฟังก์ชัน(a, b) { คืนค่า a * b; };
+ให้ divide = ฟังก์ชัน(a, b) { คืนค่า a / b; };
+ให้ modulo = ฟังก์ชัน(a, b) { คืนค่า a % b; };
+
+แสดง("Calculator Example");
+
+ให้ x = 100;
+ให้ y = 7;
+
+แสดง("Addition:");
+แสดง(add(x, y));
+
+แสดง("Subtraction:");
+แสดง(subtract(x, y));
+
+แสดง("Multiplication:");
+แสดง(multiply(x, y));
+
+แสดง("Division:");
+แสดง(divide(x, y));
+
+แสดง("Modulo:");
+แสดง(modulo(x, y));
