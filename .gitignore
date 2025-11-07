@@ -1,0 +1,51 @@
+# Compiled Object files
+*.o
+*.obj
+
+# Executables
+pasathai
+pasathai.exe
+*.exe
+*.out
+*.app
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects
+*.dll
+*.so
+*.dylib
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build directories
+build/
+bin/
+obj/
+
+# Test output files
+test_output.txt
+
+# Temporary files
+*.tmp
+*.bak
+
+# Core dumps
+core
+core.*
