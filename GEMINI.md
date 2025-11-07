@@ -1,0 +1,1 @@
+C:/personal/pasathai/AGENTS.md
