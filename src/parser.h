@@ -15,8 +15,8 @@ struct Parser
     Token cur_token;
     Token peek_token;
 
-    prefix_parse_fn prefix_parse_fns[TOKEN_WHILE + 1];
-    infix_parse_fn infix_parse_fns[TOKEN_WHILE + 1];
+    prefix_parse_fn prefix_parse_fns[TOKEN_NULL + 1];
+    infix_parse_fn infix_parse_fns[TOKEN_NULL + 1];
 };
 
 Parser *new_parser(Lexer *l);
