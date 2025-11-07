@@ -13,6 +13,7 @@ typedef enum
     NODE_PREFIX_EXPRESSION,
     NODE_INFIX_EXPRESSION,
     NODE_BOOLEAN,
+    NODE_NULL,
     NODE_IF_EXPRESSION,
     NODE_BLOCK_STATEMENT,
     NODE_FUNCTION_LITERAL,
@@ -81,10 +82,16 @@ typedef struct StringLiteral
     char *value;
 } StringLiteral;
 
+typedef struct NullLiteral
+{
+    Expression expression;
+    Token token;
+} NullLiteral;
+
 typedef struct PrefixExpression
 {
     Expression expression;
-    Token token; // The prefix token, e.g. !
+    Token token; /* The prefix token, e.g. ! */
     char *operator;
     Expression *right;
 } PrefixExpression;

@@ -20,6 +20,7 @@ typedef enum
     TOKEN_BANG,
     TOKEN_ASTERISK,
     TOKEN_SLASH,
+    TOKEN_MODULO,
 
     TOKEN_LT,
     TOKEN_GT,
@@ -45,6 +46,7 @@ typedef enum
     TOKEN_ELSE,
     TOKEN_RETURN,
     TOKEN_WHILE,
+    TOKEN_NULL,
 } TokenType;
 
 typedef struct

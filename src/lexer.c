@@ -215,6 +215,8 @@ static TokenType lookup_ident(char *ident)
         return TOKEN_RETURN;
     if (strcmp(ident, "ขณะที่") == 0)
         return TOKEN_WHILE;
+    if (strcmp(ident, "ว่างเปล่า") == 0)
+        return TOKEN_NULL;
     return TOKEN_IDENT;
 }
 
@@ -294,6 +296,10 @@ void next_token(Lexer *l, Token *tok)
     case '*':
         tok->type = TOKEN_ASTERISK;
         tok->literal = "*";
+        break;
+    case '%':
+        tok->type = TOKEN_MODULO;
+        tok->literal = "%";
         break;
     case '<':
         tok->type = TOKEN_LT;

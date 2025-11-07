@@ -30,7 +30,7 @@ static Object *builtin_print(Object **args, int arg_count)
         }
         else if (args[i]->type == OBJECT_NULL)
         {
-            printf("null");
+            printf("ว่างเปล่า");
         }
         if (i < arg_count - 1)
         {
@@ -217,8 +217,13 @@ static Object *eval_integer_infix_expression(const char *operator, Object *left,
         obj->value.integer = left_val / right_val;
         return obj;
     }
+    if (strcmp(operator, "%") == 0)
+    {
+        obj->value.integer = left_val % right_val;
+        return obj;
+    }
 
-    return NULL; // Error
+    return NULL; /* Error */
 }
 
 static Object *eval_infix_expression(InfixExpression *exp)
@@ -271,7 +276,20 @@ static Object *eval_infix_expression(InfixExpression *exp)
         }
     }
 
-    return NULL; // Error
+    /* Null comparison */
+    if (left->type == OBJECT_NULL || right->type == OBJECT_NULL)
+    {
+        if (strcmp(exp->operator, "==") == 0)
+        {
+            return (left == NULL_OBJ && right == NULL_OBJ) ? TRUE_OBJ : FALSE_OBJ;
+        }
+        if (strcmp(exp->operator, "!=") == 0)
+        {
+            return (left == NULL_OBJ && right == NULL_OBJ) ? FALSE_OBJ : TRUE_OBJ;
+        }
+    }
+
+    return NULL_OBJ; /* Error */
 }
 
 static Object *eval_block_statement(BlockStatement *block)
@@ -352,6 +370,8 @@ Object *eval(Node *node)
         return eval_string_literal((StringLiteral *)node);
     case NODE_BOOLEAN:
         return eval_boolean((Boolean *)node);
+    case NODE_NULL:
+        return NULL_OBJ;
     case NODE_PREFIX_EXPRESSION:
         return eval_prefix_expression((PrefixExpression *)node);
     case NODE_INFIX_EXPRESSION:

@@ -20,6 +20,8 @@ static Expression *parse_infix_expression(Parser *p, Expression *left);
 
 static Expression *parse_boolean(Parser *p);
 
+static Expression *parse_null(Parser *p);
+
 static Expression *parse_if_expression(Parser *p);
 
 static Expression *parse_function_literal(Parser *p);
@@ -50,6 +52,7 @@ Parser *new_parser(Lexer *l)
     register_prefix(p, TOKEN_MINUS, parse_prefix_expression);
     register_prefix(p, TOKEN_TRUE, parse_boolean);
     register_prefix(p, TOKEN_FALSE, parse_boolean);
+    register_prefix(p, TOKEN_NULL, parse_null);
     register_prefix(p, TOKEN_IF, parse_if_expression);
     register_prefix(p, TOKEN_FUNCTION, parse_function_literal);
 
@@ -58,6 +61,7 @@ Parser *new_parser(Lexer *l)
     register_infix(p, TOKEN_MINUS, parse_infix_expression);
     register_infix(p, TOKEN_SLASH, parse_infix_expression);
     register_infix(p, TOKEN_ASTERISK, parse_infix_expression);
+    register_infix(p, TOKEN_MODULO, parse_infix_expression);
     register_infix(p, TOKEN_EQ, parse_infix_expression);
     register_infix(p, TOKEN_NOT_EQ, parse_infix_expression);
     register_infix(p, TOKEN_LT, parse_infix_expression);
@@ -168,6 +172,7 @@ static int precedences[] = {
     [TOKEN_MINUS] = PREC_SUM,
     [TOKEN_SLASH] = PREC_PRODUCT,
     [TOKEN_ASTERISK] = PREC_PRODUCT,
+    [TOKEN_MODULO] = PREC_PRODUCT,
     [TOKEN_LPAREN] = PREC_CALL,
 };
 
@@ -259,6 +264,14 @@ static Expression *parse_boolean(Parser *p)
     b->token = p->cur_token;
     b->value = (p->cur_token.type == TOKEN_TRUE);
     return (Expression *)b;
+}
+
+static Expression *parse_null(Parser *p)
+{
+    NullLiteral *null = malloc(sizeof(NullLiteral));
+    null->expression.node.type = NODE_NULL;
+    null->token = p->cur_token;
+    return (Expression *)null;
 }
 
 static BlockStatement *parse_block_statement(Parser *p)
