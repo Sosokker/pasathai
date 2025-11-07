@@ -1,1 +1,1 @@
-C:/personal/pasathai/AGENTS.md
+./AGENTS.md
