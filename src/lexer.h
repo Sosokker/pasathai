@@ -63,7 +63,7 @@ typedef struct
     int column;
 } Token;
 
-typedef struct
+typedef struct Lexer
 {
     const char *input;
     int position;      // current position in input (points to current char)
@@ -71,9 +71,18 @@ typedef struct
     uint32_t ch;       // current char under examination
     int line;          // current line number
     int column;        // current column number
+
+    /* Error handling */
+    struct Error *errors; /* Forward declaration - defined in error.h */
+    const char *filename; /* Source filename for errors */
 } Lexer;
 
 Lexer *new_lexer(const char *input);
+void lexer_set_filename(Lexer *l, const char *filename);
 void next_token(Lexer *l, Token *tok);
+
+/* Error checking */
+int lexer_has_errors(Lexer *l);
+void lexer_print_errors(Lexer *l);
 
 #endif // LEXER_H

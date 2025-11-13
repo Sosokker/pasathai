@@ -5,6 +5,7 @@
 #include <ctype.h>
 
 #include "lexer.h"
+#include "error.h"
 
 static void read_char(Lexer *l)
 {
@@ -237,8 +238,31 @@ Lexer *new_lexer(const char *input)
     l->ch = 0;
     l->line = 1;
     l->column = 0;
+    l->errors = NULL;
+    l->filename = NULL;
     read_char(l);
     return l;
+}
+
+void lexer_set_filename(Lexer *l, const char *filename)
+{
+    if (l != NULL)
+    {
+        l->filename = filename;
+    }
+}
+
+int lexer_has_errors(Lexer *l)
+{
+    return l != NULL && l->errors != NULL;
+}
+
+void lexer_print_errors(Lexer *l)
+{
+    if (l != NULL && l->errors != NULL)
+    {
+        error_print_all(l->errors);
+    }
 }
 
 void next_token(Lexer *l, Token *tok)
@@ -373,8 +397,47 @@ void next_token(Lexer *l, Token *tok)
         }
         else
         {
+            /* Generate error for illegal character */
             tok->type = TOKEN_ILLEGAL;
-            tok->literal = "";
+
+            char ch_str[16] = {0};
+            if (l->ch < 128 && isprint(l->ch))
+            {
+                snprintf(ch_str, sizeof(ch_str), "%c", (char)l->ch);
+            }
+            else
+            {
+                snprintf(ch_str, sizeof(ch_str), "U+%04X", l->ch);
+            }
+            tok->literal = strdup(ch_str);
+
+            /* Build lexer error */
+            char message[128];
+            snprintf(message, sizeof(message), "unexpected character: '%s'", ch_str);
+
+            ErrorBuilder *builder = error_builder_new(ERROR_PARSE, "E100", message);
+            if (builder != NULL)
+            {
+                char *source_line = error_get_source_line(l->input, l->line);
+
+                SourceLocation loc = {
+                    .filename = l->filename,
+                    .start_line = l->line,
+                    .start_column = l->column,
+                    .end_line = l->line,
+                    .end_column = l->column};
+
+                error_builder_add_span(builder, loc, source_line, "illegal character");
+                error_builder_set_suggestion(builder, "remove this character or check for encoding issues");
+
+                Error *err = error_builder_build(builder);
+                error_append(&l->errors, err);
+
+                if (source_line != NULL)
+                {
+                    free(source_line);
+                }
+            }
         }
     }
 

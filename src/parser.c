@@ -96,11 +96,21 @@ Error *parser_get_errors(Parser *p)
 
 int parser_has_errors(Parser *p)
 {
-    return p->errors != NULL;
+    /* Check both parser and lexer errors */
+    int has_parser_errors = p->errors != NULL;
+    int has_lexer_errors = lexer_has_errors(p->l);
+    return has_parser_errors || has_lexer_errors;
 }
 
 void parser_print_errors(Parser *p)
 {
+    /* Print lexer errors first */
+    if (lexer_has_errors(p->l))
+    {
+        lexer_print_errors(p->l);
+    }
+
+    /* Then parser errors */
     if (p->errors != NULL)
     {
         error_print_all(p->errors);
@@ -125,6 +135,40 @@ static void parser_error(Parser *p, const char *message)
     if (source_line != NULL)
     {
         free(source_line);
+    }
+}
+
+/* Helper to add rich parse error with error builder */
+static void parser_error_rich(Parser *p, const char *code, const char *message,
+                              const char *label, const char *help)
+{
+    ErrorBuilder *builder = error_builder_new(ERROR_PARSE, code, message);
+
+    if (builder != NULL && p->source != NULL)
+    {
+        char *source_line = error_get_source_line(p->source, p->cur_token.line);
+
+        SourceLocation loc = {
+            .filename = p->filename,
+            .start_line = p->cur_token.line,
+            .start_column = p->cur_token.column,
+            .end_line = p->cur_token.line,
+            .end_column = p->cur_token.column};
+
+        error_builder_add_span(builder, loc, source_line, label);
+
+        if (help != NULL)
+        {
+            error_builder_set_suggestion(builder, help);
+        }
+
+        Error *err = error_builder_build(builder);
+        error_append(&p->errors, err);
+
+        if (source_line != NULL)
+        {
+            free(source_line);
+        }
     }
 }
 

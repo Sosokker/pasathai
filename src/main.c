@@ -27,6 +27,7 @@ static void run_file(const char *filename)
     fclose(file);
 
     Lexer *l = new_lexer(input);
+    lexer_set_filename(l, filename);
     Parser *p = new_parser(l);
     parser_set_source(p, input, filename);
     Program *program = parse_program(p);
@@ -44,6 +45,9 @@ static void run_file(const char *filename)
         free(input);
         exit(1);
     }
+
+    /* Initialize evaluator with source context */
+    evaluator_init(input, filename);
 
     for (int i = 0; i < program->statement_count; i++)
     {
@@ -101,6 +105,9 @@ static void run_repl(void)
             printf("Error: Failed to parse input\n");
             continue;
         }
+
+        /* Initialize evaluator with REPL context */
+        evaluator_init(line, NULL);
 
         for (int i = 0; i < program->statement_count; i++)
         {

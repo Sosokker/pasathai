@@ -2,6 +2,7 @@
 #define AST_H
 
 #include "lexer.h"
+#include "error.h"
 
 typedef enum
 {
@@ -198,5 +199,11 @@ typedef struct IndexExpression
     Expression *left;
     Expression *index;
 } IndexExpression;
+
+/* Helper: extract source location from any node */
+SourceLocation ast_node_location(Node *node, const char *filename);
+
+/* Helper: get token from any node */
+Token *ast_node_token(Node *node);
 
 #endif // AST_H

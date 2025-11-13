@@ -11,9 +11,23 @@ static Object *NULL_OBJ;
 
 static Environment *GLOBAL_ENV;
 
+/* Evaluation context */
+static EvalContext EVAL_CONTEXT = {NULL, NULL};
+
 static Object *eval_block_statement_with_env(BlockStatement *block, Environment *env);
 
-/* Runtime error helper */
+void evaluator_init(const char *source, const char *filename)
+{
+    EVAL_CONTEXT.source = source;
+    EVAL_CONTEXT.filename = filename;
+}
+
+EvalContext *evaluator_get_context(void)
+{
+    return &EVAL_CONTEXT;
+}
+
+/* Runtime error helper - simple version (backward compatibility) */
 static Object *runtime_error(const char *format, ...)
 {
     Object *obj = gc_alloc_object();
@@ -28,6 +42,51 @@ static Object *runtime_error(const char *format, ...)
     obj->value.error = strdup(buffer);
 
     fprintf(stderr, "\033[1;31merror[runtime]:\033[0m \033[1m%s\033[0m\n\n", buffer);
+
+    return obj;
+}
+
+/* Enhanced runtime error with source location */
+static Object *runtime_error_at(Node *node, const char *code, const char *message,
+                                const char *label, const char *help)
+{
+    Object *obj = gc_alloc_object();
+    obj->type = OBJECT_ERROR;
+    obj->value.error = strdup(message);
+
+    /* Build rich error if we have source context */
+    if (EVAL_CONTEXT.source != NULL && node != NULL)
+    {
+        ErrorBuilder *builder = error_builder_new(ERROR_RUNTIME, code, message);
+        if (builder != NULL)
+        {
+            SourceLocation loc = ast_node_location(node, EVAL_CONTEXT.filename);
+            char *source_line = error_get_source_line(EVAL_CONTEXT.source, loc.start_line);
+
+            if (source_line != NULL)
+            {
+                error_builder_add_span(builder, loc, source_line, label);
+                if (help != NULL)
+                {
+                    error_builder_set_suggestion(builder, help);
+                }
+
+                Error *err = error_builder_build(builder);
+                if (err != NULL)
+                {
+                    error_print(err);
+                    error_free_all(err);
+                }
+
+                free(source_line);
+            }
+        }
+    }
+    else
+    {
+        /* Fallback to simple error */
+        fprintf(stderr, "\033[1;31merror[runtime]:\033[0m \033[1m%s\033[0m\n\n", message);
+    }
 
     return obj;
 }
@@ -264,7 +323,7 @@ void init_evaluator()
     environment_set(GLOBAL_ENV, "pop", pop_obj);
 }
 
-static Object *apply_function(Object *fn, Expression **args, int arg_count)
+static Object *apply_function(Node *call_node, Object *fn, Expression **args, int arg_count)
 {
     if (fn->type == OBJECT_ERROR)
     {
@@ -298,8 +357,12 @@ static Object *apply_function(Object *fn, Expression **args, int arg_count)
     /* Check argument count */
     if (arg_count != fn->value.function.parameter_count)
     {
-        return runtime_error("wrong number of arguments: expected %d, got %d",
-                             fn->value.function.parameter_count, arg_count);
+        char message[256];
+        char label[128];
+        snprintf(message, sizeof(message), "wrong number of arguments: expected %d, got %d",
+                 fn->value.function.parameter_count, arg_count);
+        snprintf(label, sizeof(label), "expected %d argument(s)", fn->value.function.parameter_count);
+        return runtime_error_at(call_node, "E005", message, label, NULL);
     }
 
     Environment *extended_env = new_environment();
@@ -546,12 +609,20 @@ static Object *eval_infix_expression(InfixExpression *exp)
     /* Type mismatch error */
     if (left->type != right->type)
     {
-        return runtime_error("type mismatch: %s %s %s",
-                             type_name(left->type), exp->operator, type_name(right->type));
+        char message[256];
+        char label[128];
+        snprintf(message, sizeof(message), "type mismatch: %s %s %s",
+                 type_name(left->type), exp->operator, type_name(right->type));
+        snprintf(label, sizeof(label), "cannot apply '%s' to different types", exp->operator);
+        return runtime_error_at((Node *)exp, "E003", message, label,
+                                "both operands must have the same type");
     }
 
-    return runtime_error("unknown operator: %s %s %s",
-                         type_name(left->type), exp->operator, type_name(right->type));
+    char message[256];
+    snprintf(message, sizeof(message), "unknown operator: %s %s %s",
+             type_name(left->type), exp->operator, type_name(right->type));
+    return runtime_error_at((Node *)exp, "E004", message,
+                            "operator not supported for this type", NULL);
 }
 
 static Object *eval_block_statement(BlockStatement *block)
@@ -719,7 +790,7 @@ Object *eval(Node *node)
     case NODE_CALL_EXPRESSION:
     {
         Object *fn = eval((Node *)((CallExpression *)node)->function);
-        return apply_function(fn, ((CallExpression *)node)->arguments, ((CallExpression *)node)->argument_count);
+        return apply_function(node, fn, ((CallExpression *)node)->arguments, ((CallExpression *)node)->argument_count);
     }
     case NODE_LET_STATEMENT:
     {
@@ -792,7 +863,14 @@ Object *eval(Node *node)
         /* Bounds checking */
         if (idx < 0 || idx >= left->value.array.length)
         {
-            return runtime_error("array index out of bounds: index %lld, length %d", idx, left->value.array.length);
+            char message[256];
+            char label[128];
+            snprintf(message, sizeof(message),
+                     "array index out of bounds: index %lld, but array has length %d",
+                     idx, left->value.array.length);
+            snprintf(label, sizeof(label), "index %lld is invalid", idx);
+            return runtime_error_at(node, "E002", message, label,
+                                    "valid indices are from 0 to length-1");
         }
 
         return left->value.array.elements[idx];
@@ -804,7 +882,10 @@ Object *eval(Node *node)
         Object *val = environment_get(GLOBAL_ENV, ((Identifier *)node)->value);
         if (val == NULL)
         {
-            return runtime_error("undefined variable: '%s'", ((Identifier *)node)->value);
+            char message[256];
+            snprintf(message, sizeof(message), "undefined variable: '%s'",
+                     ((Identifier *)node)->value);
+            return runtime_error_at(node, "E001", message, "not found in this scope", NULL);
         }
         return val;
     }
