@@ -1,0 +1,198 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows Binary
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup MinGW
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            make
+      
+      - name: Build
+        shell: msys2 {0}
+        run: |
+          make clean
+          make
+      
+      - name: Strip binary
+        shell: msys2 {0}
+        run: strip pasathai.exe
+      
+      - name: Extract version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.ref }}" =~ refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+.*) ]]; then
+            echo "tag=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v0.0.0-dev" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Rename binary
+        shell: bash
+        run: |
+          cp pasathai.exe pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe
+      
+      - name: Generate checksum
+        shell: bash
+        run: |
+          sha256sum pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe > pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe.sha256
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-binary
+          path: |
+            pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe
+            pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe.sha256
+
+  build-linux:
+    name: Build Linux Binary
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make
+      
+      - name: Build
+        run: |
+          make clean
+          make
+      
+      - name: Strip binary
+        run: strip pasathai
+      
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" =~ refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+.*) ]]; then
+            echo "tag=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v0.0.0-dev" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Rename binary
+        run: |
+          cp pasathai pasathai-${{ steps.version.outputs.tag }}-linux-x64
+          chmod +x pasathai-${{ steps.version.outputs.tag }}-linux-x64
+      
+      - name: Generate checksum
+        run: |
+          sha256sum pasathai-${{ steps.version.outputs.tag }}-linux-x64 > pasathai-${{ steps.version.outputs.tag }}-linux-x64.sha256
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: |
+            pasathai-${{ steps.version.outputs.tag }}-linux-x64
+            pasathai-${{ steps.version.outputs.tag }}-linux-x64.sha256
+
+  release:
+    name: Create Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" =~ refs/tags/(v[0-9]+\.[0-9]+\.[0-9]+.*) ]]; then
+            echo "tag=${BASH_REMATCH[1]}" >> $GITHUB_OUTPUT
+            if [[ "${BASH_REMATCH[1]}" =~ - ]]; then
+              echo "prerelease=true" >> $GITHUB_OUTPUT
+            else
+              echo "prerelease=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+      
+      - name: Download Windows binary
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-binary
+          path: ./artifacts
+      
+      - name: Download Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: ./artifacts
+      
+      - name: Create combined checksums file
+        run: |
+          cd artifacts
+          cat *.sha256 > SHA256SUMS.txt
+          rm *.sha256
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          prerelease: ${{ steps.version.outputs.prerelease }}
+          name: Pasathai ${{ steps.version.outputs.tag }}
+          body: |
+            ## Pasathai ${{ steps.version.outputs.tag }}
+            
+            A Thai-language interpreter written in C with mark-and-sweep garbage collection.
+            
+            ### Downloads
+            
+            - **Windows (x64)**: `pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe`
+            - **Linux (x64)**: `pasathai-${{ steps.version.outputs.tag }}-linux-x64`
+            
+            ### Verify Downloads
+            
+            SHA256 checksums are provided in `SHA256SUMS.txt`. Verify your download:
+            
+            ```bash
+            # Linux/macOS
+            sha256sum -c SHA256SUMS.txt
+            
+            # Windows (PowerShell)
+            Get-FileHash pasathai-${{ steps.version.outputs.tag }}-windows-x64.exe -Algorithm SHA256
+            ```
+            
+            ### Usage
+            
+            ```bash
+            # Run a file
+            ./pasathai somefile.thai
+            
+            # Interactive REPL
+            ./pasathai
+            
+            # Show version
+            ./pasathai -v
+            ```
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
